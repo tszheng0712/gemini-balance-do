@@ -103,6 +103,7 @@ export class LoadBalancer extends DurableObject {
 		const authKey = this.env.AUTH_KEY;
 
 		let targetUrl = `${BASE_URL}${pathname}${search}`;
+		/*
 		if (authKey) {
 		// Remove api key from query parameters if present
 		// 如果URL查询参数中包含key，则验证并移除它
@@ -133,6 +134,34 @@ export class LoadBalancer extends DurableObject {
 			}
 			// 使用负载均衡方式转发请求，保持原始请求头
 			return this.forwardRequestWithLoadBalancing(targetUrl, request);
+			}
+		}
+		*/
+		if (authKey) {
+			// 如果URL查詢參數中包含key，則驗證並移除它
+			if (search.includes('key=')) {
+				const urlObj = new URL(targetUrl);
+				const requestKey = urlObj.searchParams.get('key');
+				if (requestKey) {
+					// 驗證請求中的API密鑰是否符合環境變數 AUTH_KEY 中的任何一組（支援逗號分隔）
+					if (!authKey.split(',').map(k => k.trim()).includes(requestKey)) {
+						return new Response('Unauthorized', { status: 401, headers: fixCors({}).headers });
+					}
+					// 移除URL中的key參數，避免重複
+					urlObj.searchParams.delete('key');
+					targetUrl = urlObj.toString();
+					// 使用負載均衡方式轉發請求
+					return this.forwardRequestWithLoadBalancing(targetUrl, request);
+				}
+			// 如果URL中沒有key參數，則檢查請求頭中的x-goog-api-key
+			} else {
+				const requestKey = request.headers.get('x-goog-api-key');
+				// 驗證請求頭中的API密鑰是否符合環境變數 AUTH_KEY 中的任何一組
+				if (!requestKey || !authKey.split(',').map(k => k.trim()).includes(requestKey)) {
+					return new Response('Unauthorized', { status: 401, headers: fixCors({}).headers });
+				}
+				// 使用負載均衡方式轉發請求，保持原始請求頭
+				return this.forwardRequestWithLoadBalancing(targetUrl, request);
 			}
 		}
 	}
